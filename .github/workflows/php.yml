@@ -1,0 +1,100 @@
+name: Virtuemart GPE plugin sync with EMS Online
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          repository: Rudey-ua/gpe_virtuemart
+          token: ${{ secrets.PERSONALACCESSTOKEN }}
+      - name: checkout
+        run: |
+          git checkout main
+      - name: install dependencies 
+        run: |
+          sudo composer update
+      - name: Retrieve version
+        run: |
+          echo "::set-output name=TAG_NAME::$(git describe --abbrev=0)"
+        id: version
+      - name: Retrieve tag message
+        run: |
+          echo "::set-output name=TAG_MESSAGE::$(git tag -l --format='%(contents)' ${{ steps.version.outputs.TAG_NAME }})"
+        id: message
+      - name: getting_bank_func_from_remote_repository
+        run: |
+          git clone https://x-access-token:${{ secrets.PERSONALACCESSTOKEN }}@github.com/Rudey-ua/ems-online-virtuemart
+          cd ems-online-virtuemart/
+          git checkout bank_func
+          git pull
+          sudo cp -r ./* ../
+          cd ../
+          sudo rm -rf ems-online-virtuemart/
+          sudo mkdir emspay
+          shopt -s extglob
+          sudo mv !(emspay) emspay
+          cd emspay
+          sudo mv plugins/ ../
+          sudo mv pkg_emspay ../
+      - name: AfterMergeTest
+        run : |
+          ls
+          sudo emspay/vendor/phpunit/phpunit/phpunit emspay/Ginger/Test/AfterMergeTest.php
+      - name: CreateOrderTest
+        run : |
+          ls
+          sudo emspay/vendor/phpunit/phpunit/phpunit emspay/Ginger/Test/CreateOrderTest.php
+      - name: Delete tests
+        run : |
+          sudo rm -r emspay/Ginger/Test
+      - name: Make .zip archive
+        run : |
+          sudo zip -r emspay.zip emspay
+          sudo rm -rf emspay
+          sudo find plugins -type d ! -name 'plugins'  -execdir zip -vr '{}'.zip '{}' \;
+          cd plugins/
+          sudo mkdir extensions
+          sudo mv *.zip extensions/
+          sudo mv extensions/ ../
+          cd ../
+          sudo rm -rf plugins/
+          sudo mv emspay.zip extensions/
+          sudo mv extensions/ pkg_emspay/
+          sudo zip -r pkg_emspay.zip pkg_emspay
+          sudo rm -rf pkg_emspay
+      - name: deploy_to_bank
+        run : |
+          git clone https://x-access-token:${{ secrets.PERSONALACCESSTOKEN }}@github.com/Rudey-ua/ems-online-virtuemart
+          git config --global user.email "maksym.kostenko1@nure.ua"
+          git config --global user.name "Rudey-ua"
+          mv pkg_emspay.zip ems-online-virtuemart/
+          cd ems-online-virtuemart/
+          git status
+          git add .
+          git commit -m "sync-up commit"
+          git push
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONALACCESSTOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.TAG_NAME }}
+          commitish: main
+          release_name: ${{ steps.message.outputs.TAG_MESSAGE }}
+          body_path: ems-online-virtuemart/CHANGELOG.md
+          owner: Rudey-ua
+          repo: ems-online-virtuemart
+      - name: Upload Release Asset
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONALACCESSTOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ems-online-virtuemart/pkg_emspay.zip
+          asset_name: pkg_emspay.zip
+          asset_content_type: application/zip

@@ -1,0 +1,122 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "1d17a1af3a1bc8bbddd32da137143fa3",
+    "packages": [
+        {
+            "name": "gingerpayments/ginger-php",
+            "version": "2.2.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/gingerpayments/ginger-php.git",
+                "reference": "38c32c48a4ce0e5344bbf591419803d0135e08d4"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/gingerpayments/ginger-php/zipball/38c32c48a4ce0e5344bbf591419803d0135e08d4",
+                "reference": "38c32c48a4ce0e5344bbf591419803d0135e08d4",
+                "shasum": ""
+            },
+            "require": {
+                "ext-curl": "*",
+                "ext-json": "*",
+                "php": ">=5.6.0"
+            },
+            "require-dev": {
+                "doctrine/instantiator": "~1.0.0",
+                "phpdocumentor/reflection-common": "~1.0",
+                "phpdocumentor/reflection-docblock": "~3.3",
+                "phpunit/phpunit": "~4.5"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Ginger\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Ginger Payments",
+                    "email": "dev@gingerpayments.com"
+                }
+            ],
+            "description": "The official Ginger Payments PHP SDK",
+            "homepage": "https://github.com/gingerpayments/ginger-php",
+            "keywords": [
+                "e-commerce",
+                "merchant",
+                "pay",
+                "payment"
+            ],
+            "support": {
+                "issues": "https://github.com/gingerpayments/ginger-php/issues",
+                "source": "https://github.com/gingerpayments/ginger-php/tree/2.2.0"
+            },
+            "time": "2021-06-04T08:58:02+00:00"
+        },
+        {
+            "name": "gingerpayments/ginger-plugin-sdk",
+            "version": "1.4.4",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/gingerpayments/ginger-php-plugin-sdk.git",
+                "reference": "9419407e9b879955661e8672cb0cb4cc8e62c063"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/gingerpayments/ginger-php-plugin-sdk/zipball/9419407e9b879955661e8672cb0cb4cc8e62c063",
+                "reference": "9419407e9b879955661e8672cb0cb4cc8e62c063",
+                "shasum": ""
+            },
+            "require": {
+                "ext-intl": "*",
+                "gingerpayments/ginger-php": "^2.1"
+            },
+            "require-dev": {
+                "phpstan/phpstan": "^1.7",
+                "phpunit/phpunit": "^9.5"
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "env_autoloader.php"
+                ],
+                "psr-4": {
+                    "GingerPluginSdk\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "oleksandrtutunnik",
+                    "email": "alexander.tutunnik@leasoft.org"
+                }
+            ],
+            "description": "Extra layer for ginger-php library to use in plugin development.",
+            "support": {
+                "issues": "https://github.com/gingerpayments/ginger-php-plugin-sdk/issues",
+                "source": "https://github.com/gingerpayments/ginger-php-plugin-sdk/tree/1.4.4"
+            },
+            "time": "2022-10-04T08:17:28+00:00"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": [],
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": [],
+    "plugin-api-version": "2.3.0"
+}
