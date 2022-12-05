@@ -2,10 +2,20 @@
 
 namespace Ginger\Lib;
 
+use DateTime;
+use Ginger\Redefiners\ClientBuilderRedefiner;
 use JFactory;
+use JText;
+use vRequest;
 
 class Helper
 {
+    const TERMS_CONDITION_URL_NL = 'https://www.afterpay.nl/nl/algemeen/betalen-met-afterpay/betalingsvoorwaarden';
+    const TERMS_CONDITION_URL_BE = 'https://www.afterpay.be/be/footer/betalen-met-afterpay/betalingsvoorwaarden';
+    const BE_ISO_CODE = 'BE';
+    const PLATFORM_NAME = 'VirtueMart';
+    const PLATFORM_VERSION = '4.0.6';
+
     /**
      * GINGER_ENDPOINT used for create Ginger client
      */
@@ -66,42 +76,173 @@ class Helper
     }
 
     /**
-     * Get CA certificate path
+     * validate date of birth
      *
-     * @return bool|string
+     * @param type $string
+     * @return boolean
+     * @since v1.1.0
      */
-    public static function getCaCertPath(){
-        return realpath(JPATH_LIBRARIES . '/' . Bankconfig::BANK_PREFIX . '/assets/cacert.pem');
-    }
-
-    /**
-     * Returns a new array with all elements which have a null value removed.
-     *
-     * @param array $array
-     * @return array
-     */
-    public static function withoutNullValues(array $array)
+    static function isValidDate($string)
     {
-        static $fn = __FUNCTION__;
-
-        foreach ($array as $key => $value) {
-            if (is_array($value)) {
-                $array[$key] = self::$fn($array[$key]);
-            }
-
-            if (empty($array[$key]) && $array[$key] !== '0' && $array[$key] !== 0) {
-                unset($array[$key]);
-            }
+        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $string, $matches)) {
+            return DateTime::createFromFormat('d-m-Y', $string) instanceof \DateTime;
         }
-
-        return $array;
+        return false;
     }
 
     /**
-     * @return string
+     *
+     * clear user seesion data
+     * @since v1.1.0
      */
-    public static function getPaymentCurrency()
+    static function clearSessionData()
     {
-        return 'EUR';
+        $session = JFactory::getSession();
+        $session->set(Bankconfig::BANK_PREFIX . 'afterpay_gender', null, 'vm');
+        $session->set(Bankconfig::BANK_PREFIX . 'afterpay_dob', null, 'vm');
+        $session->set(Bankconfig::BANK_PREFIX . 'afterpay_terms_and_confditions', null, 'vm');
+    }
+
+    /*--------------------------------------------------------------------*/
+    //BankTransfer
+
+    static function getGingerPaymentIban($gingerOrder)
+    {
+        return current($gingerOrder->toArray()['transactions'])['payment_method_details']['creditor_iban'];
+    }
+
+    static function getGingerPaymentBic($gingerOrder)
+    {
+        return current($gingerOrder->toArray()['transactions'])['payment_method_details']['creditor_bic'];
+    }
+
+    static function getGingerPaymentHolderName($gingerOrder)
+    {
+        return current($gingerOrder->toArray()['transactions'])['payment_method_details']['creditor_account_holder_name'];
+    }
+
+    static function getGingerPaymentHolderCity($gingerOrder)
+    {
+        return current($gingerOrder->toArray()['transactions'])['payment_method_details']['creditor_account_holder_city'];
+    }
+
+    static function getGingerPaymentHolderCountry($gingerOrder)
+    {
+        return current($gingerOrder->toArray()['transactions'])['payment_method_details']['creditor_account_holder_country'];
+    }
+
+    static function getGingerPaymentReference($gingerOrder)
+    {
+        return current($gingerOrder->toArray()['transactions'])['payment_method_details']['reference'];
+    }
+
+    static function gettermsAndConditionsUrlByCountry($country)
+    {
+        if (strtoupper($country) === Helper::BE_ISO_CODE) {
+            return Helper::TERMS_CONDITION_URL_BE;
+        }
+        return Helper::TERMS_CONDITION_URL_NL;
+    }
+
+    static function applePayDetection()
+    {
+        echo "<script>
+            if(!window.ApplePaySession){
+                document.cookie = 'ginger_apple_pay_status = false'
+            } else {
+                document.cookie = 'ginger_apple_pay_status = true'
+            }
+        </script>";
+
+        return $_COOKIE['ginger_apple_pay_status'] === 'true';
+    }
+
+    /**
+     * Fields to create the payment table
+     *
+     * @return array SQL Fileds
+     * @since v1.0.0
+     */
+    static function getTableSQLFields()
+    {
+        $SQLfields = array(
+            'id' => 'int(1) UNSIGNED NOT NULL AUTO_INCREMENT',
+            'virtuemart_order_id' => 'int(1) UNSIGNED',
+            'ginger_order_id' => 'varchar(64)',
+            'order_number' => 'char(64)',
+            'virtuemart_paymentmethod_id' => 'mediumint(1) UNSIGNED',
+            'payment_name' => 'varchar(5000)',
+            'payment_order_total' => 'decimal(15,5) NOT NULL DEFAULT \'0.00000\'',
+            'payment_currency' => 'char(3)',
+            'email_currency' => 'char(3)',
+            'cost_per_transaction' => 'decimal(10,2)',
+            'cost_min_transaction' => 'decimal(10,2)',
+            'cost_percent_total' => 'decimal(10,2)',
+            'tax_id' => 'smallint(1)'
+        );
+
+        return $SQLfields;
+    }
+
+    /**
+     * Check should page after no response from the bank should be redirected
+     *
+     * @return bool
+     * @since v1.0.0
+     */
+    static function isProcessingOrderNotConfirmedRedirect()
+    {
+        return (bool)(vRequest::get('no_confirmation_redirect') !== null && vRequest::get('no_confirmation_redirect') == '1');
+    }
+
+    /**
+     *
+     * @param type $method
+     * @param type $selectedUserCurrency
+     * @return type
+     * @since v1.0.0
+     */
+    static function getPaymentCurrency(&$method, $selectedUserCurrency = false)
+    {
+        if (empty($method->payment_currency)) {
+            $vendor_model = \VmModel::getModel('vendor');
+            $vendor = $vendor_model->getVendor($method->virtuemart_vendor_id);
+            $method->payment_currency = $vendor->vendor_currency;
+            return $method->payment_currency;
+        } else {
+
+            $vendor_model = \VmModel::getModel('vendor');
+            $vendor_currencies = $vendor_model->getVendorAndAcceptedCurrencies($method->virtuemart_vendor_id);
+
+            if (!$selectedUserCurrency) {
+                if ($method->payment_currency == -1) {
+                    $mainframe = \JFactory::getApplication();
+                    $selectedUserCurrency = $mainframe->getUserStateFromRequest("virtuemart_currency_id", 'virtuemart_currency_id', vRequest::getInt('virtuemart_currency_id', $vendor_currencies['vendor_currency']));
+                } else {
+                    $selectedUserCurrency = $method->payment_currency;
+                }
+            }
+
+            $vendor_currencies['all_currencies'] = explode(',', $vendor_currencies['all_currencies']);
+            if (in_array($selectedUserCurrency, $vendor_currencies['all_currencies'])) {
+                $method->payment_currency = $selectedUserCurrency;
+            } else {
+                $method->payment_currency = $vendor_currencies['vendor_currency'];
+            }
+
+            return $method->payment_currency;
+        }
+    }
+
+    /**
+     *
+     * @param string $html
+     * @since v1.0.0
+     */
+    static function processFalseOrderStatusResponse($html)
+    {
+        $mainframe = \JFactory::getApplication();
+        $mainframe->enqueueMessage($html, 'error');
+        $mainframe->redirect(\JRoute::_('index.php?option=com_virtuemart&view=cart', FALSE));
     }
 }

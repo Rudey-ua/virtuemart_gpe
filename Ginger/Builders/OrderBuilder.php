@@ -34,7 +34,6 @@ class OrderBuilder
         $this->method = $method;
         $this->cart = $cart;
         $this->payment_method = $payment_method;
-        $this->bankconfig = new Bankconfig();
     }
 
     public function getTotalInCents()
@@ -133,9 +132,9 @@ class OrderBuilder
         return new Extra([
             'fields' => [
                 'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
-                'platform_name' => $this->bankconfig::PLATFORM_NAME,
-                'platform_version' => $this->bankconfig->getPlatformVersion(),
-                'plugin_name' => $this->bankconfig::PLUGIN_NAME,
+                'platform_name' => Helper::PLATFORM_NAME,
+                'platform_version' => Helper::PLATFORM_VERSION,
+                'plugin_name' => Bankconfig::PLUGIN_NAME,
                 'plugin_version' => Helper::getPluginVersion(),
             ]
         ]);
@@ -150,7 +149,7 @@ class OrderBuilder
             name: current($this->cart->products)->product_name,
             quantity: current($this->cart->products)->quantity,
             amount: new Amount($this->getTotalInCents()),
-                vatPercentage: new VatPercentage(current($this->cart->products)->prices['salesPrice']),
+            vatPercentage: new VatPercentage(current($this->cart->products)->prices['salesPrice']),
             currency: new Currency($this->getCurrency()),
         ));
         return $orderLines;
