@@ -263,30 +263,30 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
             }
         }
 
-        $ginger_order = (new OrderBuilderRedefiner($order, $method, $cart, $this->payment_method))->buildOrder();
+        $buildOrder = (new OrderBuilderRedefiner($order, $method, $cart, $this->payment_method))->buildOrder();
         $client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
         $bankError = Bankconfig::BANK_PREFIX . '_LIB_ERROR_TRANSACTION';
 
         try {
-            $response = $client->sendOrder($ginger_order);
+            $gingerOrder = $client->sendOrder($buildOrder);
         } catch (\Exception $exception) {
             $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $exception->getMessage() . "</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
-        if ($response->getStatus()->get() == 'error') {
-            $html = "<p>" . JText::_($bankError) . "</p><p>Error: ".$response->toArray()['transactions'][0]['reason']."</p>";
+        if ($gingerOrder->getStatus()->get() == 'error') {
+            $html = "<p>" . JText::_($bankError) . "</p><p>Error: ".$gingerOrder->toArray()['transactions'][0]['reason']."</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
-        if (array_key_exists('reason', $response->toArray()['transactions'][0])) {
-            $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $response->toArray()['transactions'][0]['reason'] . "</p>";
+        if (array_key_exists('reason', $gingerOrder->toArray()['transactions'][0])) {
+            $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $gingerOrder->toArray()['transactions'][0]['reason'] . "</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
-        if (!$response->getCurrentTransaction()->getId()->get()) {
+        if (!$gingerOrder->getCurrentTransaction()->getId()->get()) {
             $html = "<p>" . JText::_($bankError) . "</p><p>Error: Response did not include id!</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
         if ($this->payment_method != 'bank-transfer') {
-            if (!$response->getPaymentUrl()) {
+            if (!$gingerOrder->getPaymentUrl()) {
                 $html = "<p>" . JText::_($bankError) . "</p><p>Error: Response did not include payment url!</p>";
                 Helper::processFalseOrderStatusResponse($html);
             }
@@ -303,11 +303,11 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         $dbValues['email_currency'] = $emailCurrency;
         $dbValues['payment_order_total'] = $totalInPaymentCurrency['value'];
         $dbValues['tax_id'] = $method->tax_id;
-        $dbValues['ginger_order_id'] = $response->getId()->get();
+        $dbValues['ginger_order_id'] = $gingerOrder->getId()->get();
         $this->storePSPluginInternalData($dbValues);
-        $virtuemartOrderId = $response->toArray()['merchant_order_id'];
+        $virtuemartOrderId = $gingerOrder->toArray()['merchant_order_id'];
         $virtuemartOrderNumber = Helper::getOrderNumberByGingerOrder(vRequest::get('order_id'), $this->_tablename);
-        $statusSucceeded = $this->updateOrder($response->getStatus()->get(), $virtuemartOrderId);
+        $statusSucceeded = $this->updateOrder($gingerOrder->getStatus()->get(), $virtuemartOrderId);
 
         if ($this->payment_method == 'afterpay') {
             $html = "<p>" . Helper::getOrderDescription($virtuemartOrderNumber) . "</p>";
@@ -320,7 +320,7 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
             }
 
             $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_LIB_ERROR_STATUS') . "</p>";
-            if ($response->getStatus()->get()) {
+            if ($gingerOrder->getStatus()->get()) {
                 $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_AFTERPAY_CANCELLED_STATUS_MSG') . "</p>";
             }
             Helper::processFalseOrderStatusResponse($html);
@@ -330,13 +330,13 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
             if ($statusSucceeded) {
                 $html = $this->renderByLayout('post_payment', array(
                     'total_to_pay' => $totalInPaymentCurrency['display'],
-                    'reference' => Helper::getGingerPaymentReference($response),
+                    'reference' => Helper::getGingerPaymentReference($gingerOrder),
                     'description' => "<p>" . Helper::getOrderDescription($virtuemartOrderId) . "</p>",
-                    'bank_information' => "IBAN: " . Helper::getGingerPaymentIban($response) .
-                        "<br/>BIC: " . Helper::getGingerPaymentBic($response) .
-                        "<br/>Account holder: " . Helper::getGingerPaymentHolderName($response) .
-                        "<br/>City: " . Helper::getGingerPaymentHolderCity($response) .
-                        "<br/>Country: " . Helper::getGingerPaymentHolderCountry($response)
+                    'bank_information' => "IBAN: " . Helper::getGingerPaymentIban($gingerOrder) .
+                        "<br/>BIC: " . Helper::getGingerPaymentBic($gingerOrder) .
+                        "<br/>Account holder: " . Helper::getGingerPaymentHolderName($gingerOrder) .
+                        "<br/>City: " . Helper::getGingerPaymentHolderCity($gingerOrder) .
+                        "<br/>Country: " . Helper::getGingerPaymentHolderCountry($gingerOrder)
                 ));
                 $this->emptyCart(null, $virtuemartOrderId);
                 vRequest::setVar('html', $html);
@@ -346,13 +346,13 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
                 "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_LIB_ERROR_STATUS') . "</p>";
 
             if ($this->payment_method == 'afterpay') {
-                if ($response['status']) {
+                if ($gingerOrder['status']) {
                     $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_AFTERPAY_CANCELLED_STATUS_MSG') . "</p>";
                 }
             }
             Helper::processFalseOrderStatusResponse($html);
         }
-        JFactory::getApplication()->redirect($response->getPaymentUrl());
+        JFactory::getApplication()->redirect($gingerOrder->getPaymentUrl());
     }
 
     /**
