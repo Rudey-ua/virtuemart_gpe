@@ -274,11 +274,11 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
             Helper::processFalseOrderStatusResponse($html);
         }
         if ($gingerOrder->getStatus()->get() == 'error') {
-            $html = "<p>" . JText::_($bankError) . "</p><p>Error: ".$gingerOrder->toArray()['transactions'][0]['reason']."</p>";
+            $html = "<p>" . JText::_($bankError) . "</p><p>Error: ".$gingerOrder->toArray()['transactions'][0]['customer_message']."</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
-        if (array_key_exists('reason', $gingerOrder->toArray()['transactions'][0])) {
-            $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $gingerOrder->toArray()['transactions'][0]['reason'] . "</p>";
+        if (array_key_exists('customer_message', $gingerOrder->toArray()['transactions'][0])) {
+            $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $gingerOrder->toArray()['transactions'][0]['customer_message'] . "</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
         if (!$gingerOrder->getCurrentTransaction()->getId()->get()) {
