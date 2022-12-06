@@ -205,31 +205,25 @@ class Helper
     static function getPaymentCurrency(&$method, $selectedUserCurrency = false)
     {
         if (empty($method->payment_currency)) {
-            $vendor_model = \VmModel::getModel('vendor');
-            $vendor = $vendor_model->getVendor($method->virtuemart_vendor_id);
+            $vendorModel = \VmModel::getModel('vendor');
+            $vendor = $vendorModel->getVendor($method->virtuemart_vendor_id);
             $method->payment_currency = $vendor->vendor_currency;
             return $method->payment_currency;
         } else {
 
-            $vendor_model = \VmModel::getModel('vendor');
-            $vendor_currencies = $vendor_model->getVendorAndAcceptedCurrencies($method->virtuemart_vendor_id);
+            $vendorModel = \VmModel::getModel('vendor');
+            $vendorCurrencies = $vendorModel->getVendorAndAcceptedCurrencies($method->virtuemart_vendor_id);
 
             if (!$selectedUserCurrency) {
                 if ($method->payment_currency == -1) {
                     $mainframe = \JFactory::getApplication();
-                    $selectedUserCurrency = $mainframe->getUserStateFromRequest("virtuemart_currency_id", 'virtuemart_currency_id', vRequest::getInt('virtuemart_currency_id', $vendor_currencies['vendor_currency']));
+                    $selectedUserCurrency = $mainframe->getUserStateFromRequest("virtuemart_currency_id", 'virtuemart_currency_id', vRequest::getInt('virtuemart_currency_id', $vendorCurrencies['vendor_currency']));
                 } else {
                     $selectedUserCurrency = $method->payment_currency;
                 }
             }
-
-            $vendor_currencies['all_currencies'] = explode(',', $vendor_currencies['all_currencies']);
-            if (in_array($selectedUserCurrency, $vendor_currencies['all_currencies'])) {
-                $method->payment_currency = $selectedUserCurrency;
-            } else {
-                $method->payment_currency = $vendor_currencies['vendor_currency'];
-            }
-
+            $vendorCurrencies['all_currencies'] = explode(',', $vendorCurrencies['all_currencies']);
+            (in_array($selectedUserCurrency, $vendorCurrencies['all_currencies'])) ? $method->payment_currency = $selectedUserCurrency : $method->payment_currency = $vendorCurrencies['vendor_currency'];
             return $method->payment_currency;
         }
     }
@@ -244,5 +238,52 @@ class Helper
         $mainframe = \JFactory::getApplication();
         $mainframe->enqueueMessage($html, 'error');
         $mainframe->redirect(\JRoute::_('index.php?option=com_virtuemart&view=cart', FALSE));
+    }
+
+    /**
+     *
+     * @param string $newStatus
+     * @param int $virtuemart_order_id
+     * @since v1.0.0
+     */
+    static function updateOrderStatus($newStatus, $virtuemart_order_id)
+    {
+        $modelOrder = \VmModel::getModel('orders');
+        $order['order_status'] = $newStatus;
+        $order['customer_notified'] = 1;
+        $order['comments'] = '';
+        $modelOrder->updateStatusForOneOrder($virtuemart_order_id, $order, TRUE);
+    }
+
+
+    static function getOrderIdByGingerOrder($gingerOrderId, $tableName)
+    {
+        $query = "SELECT `virtuemart_order_id` FROM " . $tableName . "  WHERE `ginger_order_id` = '" . $gingerOrderId . "'";
+        $db = \JFactory::getDBO();
+        $db->setQuery($query);
+        $response = $db->loadObject();
+        if (is_object($response)) {
+            return (int)$response->virtuemart_order_id;
+        }
+        return 0;
+    }
+
+    /**
+     * fetch vm order number for the payment table
+     *
+     * @param type $gingerOrderId
+     * @return string
+     * @since v1.0.0
+     */
+    static function getOrderNumberByGingerOrder($gingerOrderId, $tableName)
+    {
+        $query = "SELECT `order_number` FROM " . $tableName . "  WHERE `ginger_order_id` = '" . $gingerOrderId . "'";
+        $db = \JFactory::getDBO();
+        $db->setQuery($query);
+        $response = $db->loadObject();
+        if (is_object($response)) {
+            return (string)$response->order_number;
+        }
+        return 0;
     }
 }
