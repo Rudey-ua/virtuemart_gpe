@@ -168,9 +168,9 @@ class CreateOrderTest extends TestCase
     {
         $expectedPaymentMethodDetails = ['fields' => [
             'user_agent' => null,
-            'platform_name' => 'VirtueMart',
+            'platform_name' => Helper::PLATFORM_NAME,
             'platform_version' => '4.0.6',
-            'plugin_name' => 'ems-online-virtuemart',
+            'plugin_name' => \Ginger\Lib\Bankconfig::PLUGIN_NAME,
             'plugin_version' => 'Joomla Virtuemart v1.3.1',
         ]];
         $realPaymentMethodDetails = $this->orderBuilder->getExtra()->toArray();

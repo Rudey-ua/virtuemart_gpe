@@ -91,12 +91,9 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         }
         $countries = array();
         if (!empty($method->countries)) {
-            if (!is_array($method->countries)) {
-                $countries[0] = $method->countries;
-            } else {
-                $countries = $method->countries;
-            }
+            (!is_array($method->countries)) ? $countries[0] = $method->countries : $countries = $method->countries;
         }
+
         if (!is_array($address)) {
             $address = array();
             $address['virtuemart_country_id'] = 0;
@@ -308,23 +305,6 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         $virtuemartOrderId = $gingerOrder->toArray()['merchant_order_id'];
         $virtuemartOrderNumber = Helper::getOrderNumberByGingerOrder(vRequest::get('order_id'), $this->_tablename);
         $statusSucceeded = $this->updateOrder($gingerOrder->getStatus()->get(), $virtuemartOrderId);
-
-        if ($this->payment_method == 'afterpay') {
-            $html = "<p>" . Helper::getOrderDescription($virtuemartOrderNumber) . "</p>";
-            if ($statusSucceeded) {
-                Helper::clearSessionData();
-                $this->emptyCart(null, $virtuemartOrderId);
-                $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_LIB_THANK_YOU_FOR_YOUR_ORDER') . "</p>";
-                vRequest::setVar('html', $html);
-                return true;
-            }
-
-            $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_LIB_ERROR_STATUS') . "</p>";
-            if ($gingerOrder->getStatus()->get()) {
-                $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_AFTERPAY_CANCELLED_STATUS_MSG') . "</p>";
-            }
-            Helper::processFalseOrderStatusResponse($html);
-        }
 
         if ($this->payment_method == 'bank-transfer') {
             if ($statusSucceeded) {
