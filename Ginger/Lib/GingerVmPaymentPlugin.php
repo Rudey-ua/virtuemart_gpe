@@ -4,6 +4,7 @@ namespace Ginger\Lib;
 
 require_once(JPATH_LIBRARIES . '/' .Bankconfig::BANK_PREFIX .'/vendor/autoload.php');
 
+use DateTime;
 use Ginger\Redefiners\ClientBuilderRedefiner;
 use Ginger\Redefiners\OrderBuilderRedefiner;
 use GingerPluginSdk\Properties\Currency;
@@ -40,8 +41,6 @@ use vRequest;
  **/
 class GingerVmPaymentPlugin extends \vmPSPlugin
 {
-    private \GingerPluginSdk\Client $client;
-
     /**
      * Constructor
      *
@@ -52,11 +51,10 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
     {
         parent::__construct($subject, $config);
         $this->_loggable = TRUE;
-        $this->tableFields = array_keys(Helper::getTableSQLFields());
+        $this->tableFields = array_keys($this->getTableSQLFields());
         $this->_tablepkey = 'id';
         $this->_tableId = 'id';
         $this->setConfigParameterable($this->_configTableFieldName, parent::getVarsToPush());
-        $this->client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
     }
 
     /**
@@ -69,44 +67,37 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
     }
 
     /**
-     * Check if the payment conditions are fulfilled for this payment method
+     * Fields to create the payment table
      *
-     * @param $cart_prices : cart prices
-     * @param $payment
-     * @return true: if the conditions are fulfilled, false otherwise
-     *
-     * @author: Valerie Isaksen
-     *
+     * @return array SQL Fileds
+     * @since v1.0.0
      */
-    protected function checkConditions($cart, $method, $cart_prices)
+    function getTableSQLFields()
     {
-        $this->convert_condition_amount($method);
-        $amount = $this->getCartAmount($cart_prices);
-        $address = (($cart->ST == 0) ? $cart->BT : $cart->ST);
+        $SQLfields = array(
+            'id' => 'int(1) UNSIGNED NOT NULL AUTO_INCREMENT',
+            'virtuemart_order_id' => 'int(1) UNSIGNED',
+            'ginger_order_id' => 'varchar(64)',
+            'order_number' => 'char(64)',
+            'virtuemart_paymentmethod_id' => 'mediumint(1) UNSIGNED',
+            'payment_name' => 'varchar(5000)',
+            'payment_order_total' => 'decimal(15,5) NOT NULL DEFAULT \'0.00000\'',
+            'payment_currency' => 'char(3)',
+            'email_currency' => 'char(3)',
+            'cost_per_transaction' => 'decimal(10,2)',
+            'cost_min_transaction' => 'decimal(10,2)',
+            'cost_percent_total' => 'decimal(10,2)',
+            'tax_id' => 'smallint(1)'
+        );
+        return $SQLfields;
+    }
 
-        $amountCond = ($amount >= $method->min_amount and $amount <= $method->max_amount
-            or ($method->min_amount <= $amount and ($method->max_amount == 0)));
-        if (!$amountCond) {
-            return FALSE;
-        }
-        $countries = array();
-        if (!empty($method->countries)) {
-            (!is_array($method->countries)) ? $countries[0] = $method->countries : $countries = $method->countries;
-        }
-
-        if (!is_array($address)) {
-            $address = array();
-            $address['virtuemart_country_id'] = 0;
-        }
-
-        if (!isset($address['virtuemart_country_id'])) {
-            $address['virtuemart_country_id'] = 0;
-        }
-        if (count($countries) == 0 || in_array($address['virtuemart_country_id'], $countries) || count($countries) == 0) {
-            return TRUE;
-        }
-
-        return FALSE;
+    /**
+     * Check if the payment conditions are fulfilled for this payment method
+     */
+    protected function checkConditions($cart, $method, $cart_prices): bool
+    {
+        return parent::checkConditions($cart, $method, $cart_prices);
     }
 
     /**
@@ -200,10 +191,10 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
 
     public function plgVmSetOnTablePluginParamsPayment($name, $id, &$table)
     {
-        $afterPay = Bankconfig::BANK_PREFIX_UPPER . '_AFTERPAY_COUNTRIES_AVAILABLE';
+        $afterpay = Bankconfig::BANK_PREFIX_UPPER . '_AFTERPAY_COUNTRIES_AVAILABLE';
 
         if ($name == Bankconfig::BANK_PREFIX . 'afterpay') {
-            $table->$afterPay = "NL, BE";
+            $table->$afterpay = "NL, BE";
         }
         return $this->setOnTablePluginParams($name, $id, $table);
     }
@@ -214,16 +205,14 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
      * When yes it is calling the standard method to create the tables
      *
      */
-    public function plgVmOnStoreInstallPaymentPluginTable($jplugin_id)
+    public function plgVmOnStoreInstallPaymentPluginTable()
     {
-        return parent::onStoreInstallPluginTable($jplugin_id);
+        return parent::onStoreInstallPluginTable();
     }
 
     public function plgVmOnCheckAutomaticSelectedPayment(\VirtueMartCart $cart, array $cart_prices = array(), &$paymentCounter)
     {
-        $return = $this->onCheckAutomaticSelected($cart, $cart_prices, $paymentCounter);
-
-        return isset($return) ? 0 : NULL;
+        $this->onCheckAutomaticSelected($cart, $cart_prices, $paymentCounter);
     }
 
     /**
@@ -235,8 +224,7 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
     public function plgVmConfirmedOrder($cart, $order)
     {
         $method = $this->getVmPluginMethod($order['details']['BT']->virtuemart_paymentmethod_id);
-
-        if (!($method)) {
+        if (!$method) {
             return null;
         }
         if (!$this->selectedThisElement($method->payment_element)) {
@@ -249,6 +237,7 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         vmLanguage::loadJLang('com_virtuemart_orders', true);
 
         Helper::getPaymentCurrency($method, $order['details']['BT']->payment_currency_id);
+
         $currencyCode = shopFunctions::getCurrencyByID($method->payment_currency, 'currency_code_3');
         $emailCurrency = $this->getEmailCurrency($method);
         $totalInPaymentCurrency = vmPSPlugin::getAmountInCurrency($order['details']['BT']->order_total, $method->payment_currency);
@@ -259,23 +248,13 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
                 $method->payment_info = vmText::_($method->payment_info);
             }
         }
-
         $buildOrder = (new OrderBuilderRedefiner($order, $method, $cart, $this->payment_method))->buildOrder();
         $client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
         $bankError = Bankconfig::BANK_PREFIX . '_LIB_ERROR_TRANSACTION';
-
         try {
             $gingerOrder = $client->sendOrder($buildOrder);
         } catch (\Exception $exception) {
             $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $exception->getMessage() . "</p>";
-            Helper::processFalseOrderStatusResponse($html);
-        }
-        if ($gingerOrder->getStatus()->get() == 'error') {
-            $html = "<p>" . JText::_($bankError) . "</p><p>Error: ".$gingerOrder->toArray()['transactions'][0]['customer_message']."</p>";
-            Helper::processFalseOrderStatusResponse($html);
-        }
-        if (array_key_exists('customer_message', $gingerOrder->toArray()['transactions'][0])) {
-            $html = "<p>" . JText::_($bankError) . "</p><p>Error: " . $gingerOrder->toArray()['transactions'][0]['customer_message'] . "</p>";
             Helper::processFalseOrderStatusResponse($html);
         }
         if (!$gingerOrder->getCurrentTransaction()->getId()->get()) {
@@ -288,8 +267,7 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
                 Helper::processFalseOrderStatusResponse($html);
             }
         }
-
-        JFactory::getSession()->clear(Bankconfig::BANK_PREFIX . 'ideal_issuer', 'vm'); //clear session values
+        JFactory::getSession()->clear(Bankconfig::BANK_PREFIX . 'ideal_issuer', 'vm');
         $dbValues['payment_name'] = $this->renderPluginName($method) . '<br />' . $method->payment_info;
         $dbValues['order_number'] = $order['details']['BT']->order_number;
         $dbValues['virtuemart_paymentmethod_id'] = $order['details']['BT']->virtuemart_paymentmethod_id;
@@ -302,7 +280,7 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         $dbValues['tax_id'] = $method->tax_id;
         $dbValues['ginger_order_id'] = $gingerOrder->getId()->get();
         $this->storePSPluginInternalData($dbValues);
-        $virtuemartOrderId = $gingerOrder->toArray()['merchant_order_id'];
+        $virtuemartOrderId = $gingerOrder->getMerchantOrderId()->get();
         $virtuemartOrderNumber = Helper::getOrderNumberByGingerOrder(vRequest::get('order_id'), $this->_tablename);
         $statusSucceeded = $this->updateOrder($gingerOrder->getStatus()->get(), $virtuemartOrderId);
 
@@ -325,11 +303,6 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
             $html = "<p>" . Helper::getOrderDescription($virtuemartOrderNumber) . "</p>" .
                 "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_LIB_ERROR_STATUS') . "</p>";
 
-            if ($this->payment_method == 'afterpay') {
-                if ($gingerOrder['status']) {
-                    $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_AFTERPAY_CANCELLED_STATUS_MSG') . "</p>";
-                }
-            }
             Helper::processFalseOrderStatusResponse($html);
         }
         JFactory::getApplication()->redirect($gingerOrder->getPaymentUrl());
@@ -341,7 +314,6 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
      * @param string $paymentResponse
      * @param string $html
      * @return bool|null|string
-     * @throws \Exception
      * @since v1.0.0
      */
     public function plgVmOnPaymentResponseReceived(&$html, &$paymentResponse)
@@ -356,23 +328,25 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         if (!class_exists('VirtueMartModelOrders')) {
             require(VMPATH_ADMIN . DS . 'models' . DS . 'orders.php');
         }
+
         vmLanguage::loadJLang('com_virtuemart', true);
         vmLanguage::loadJLang('com_virtuemart_orders', true);
 
-        $gingerOrder = ($this->client->getOrder(vRequest::get('order_id')))->toArray();
-        $virtuemartOrderId = Helper::getOrderIdByGingerOrder(vRequest::get('order_id'), $this->_tablename);
-        $virtuemartOrderNumber = Helper::getOrderNumberByGingerOrder(vRequest::get('order_id'), $this->_tablename);
-        $statusSucceeded = $this->updateOrder($gingerOrder['status'], $virtuemartOrderId);
-        $html = "<p>" . Helper::getOrderDescription($virtuemartOrderNumber) . "</p>";
+        $client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
+        $gingerOrder = $client->getOrder(vRequest::get('order_id'))->toArray();
+        $virtuemart_order_id = Helper::getOrderIdByGingerOrder(vRequest::get('order_id'), $this->_tablename);
+        $virtuemart_order_number = Helper::getOrderNumberByGingerOrder(vRequest::get('order_id'), $this->_tablename);
+        $statusSucceeded = $this->updateOrder($gingerOrder['status'], $virtuemart_order_id);
+        $html = "<p>" . Helper::getOrderDescription($virtuemart_order_number) . "</p>";
 
         if ($this->payment_method == 'ideal') {
-            if (Helper::isProcessingOrderNotConfirmedRedirect()) {
-                $this->emptyCart(null, $virtuemartOrderId);
+            if ($this->isProcessingOrderNotConfirmedRedirect()) {
+                $this->emptyCart(null, $virtuemart_order_id);
                 $html .= "<p>" . JText::_(Bankconfig::BANK_PREFIX . '_LIB_NO_BANK_RESPONSE') . "</p>";
                 Helper::processFalseOrderStatusResponse($html);
             }
 
-            if ($gingerOrder['status'] === 'processing' && !Helper::isProcessingOrderNotConfirmedRedirect()) {
+            if ($gingerOrder['status'] === 'processing' && !$this->isProcessingOrderNotConfirmedRedirect()) {
                 $box = '
                 jQuery(document).ready(function($) {
                     var fallback_url = \'' . JURI::root() . '?option=com_virtuemart&view=pluginresponse&task=pluginresponsereceived&pm=' . vRequest::getInt('pm') . '&project_id=' . vRequest::getInt('project_id') . '&order_id=' . vRequest::get('order_id') . '&no_confirmation_redirect=1\';
@@ -400,7 +374,7 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
                 });
                 ';
                 $html = $this->renderByLayout('payment_processing', array(
-                    'description' => "<p>" . Helper::getOrderDescription($virtuemartOrderId) . "</p>",
+                    'description' => "<p>" . Helper::getOrderDescription($virtuemart_order_id) . "</p>",
                     'logo' => sprintf('%s/assets/images/ajax-loader.gif', (JURI::root() . $this->getOwnUrl()))
                 ));
                 vmJsApi::addJScript('box', $box);
@@ -423,17 +397,17 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
                 Helper::processFalseOrderStatusResponse($html);
             }
 
-            $this->emptyCart(null, $virtuemartOrderId);
-            $paymentResponse .= "<br>" . "Paid with " . $this->getDataByOrderId($virtuemartOrderId)->payment_name;
+            $this->emptyCart(null, $virtuemart_order_id);
+            $paymentResponse .= "<br>" . "Paid with " . $this->getDataByOrderId($virtuemart_order_id)->payment_name;
             vRequest::setVar('html', $html);
             vRequest::setVar('display_title', false);
             return true;
         }
 
         if ($statusSucceeded) {
-            $paymentResponse .= "<br>" . "Paid with " . $this->getDataByOrderId($virtuemartOrderId)->payment_name;
+            $paymentResponse .= "<br>" . "Paid with " . $this->getDataByOrderId($virtuemart_order_id)->payment_name;
             vRequest::setVar('html', $html);
-            $this->emptyCart(null, $virtuemartOrderId);
+            $this->emptyCart(null, $virtuemart_order_id);
             vRequest::setVar('html', $html);
             return true;
         }
@@ -449,45 +423,67 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
      */
     public function plgVmOnPaymentNotification()
     {
-        if (!($method = $this->getVmPluginMethod(vRequest::getInt('pm')))) {
+        $input = json_decode(file_get_contents("php://input"), true);
+        $method = $this->getVmPluginMethod(vRequest::getInt('pm'));
+
+        if (!$method) {
             return null;
         }
         if (!$this->selectedThisElement($method->payment_element)) {
             return false;
         }
-
-        $input = json_decode(file_get_contents("php://input"), true);
-
         if (empty($input['order_id']) || $input['event'] !== 'status_changed') {
             exit('Invalid input');
         }
-
-        $gingerOrder = $this->client->getOrder($input['order_id'])->toArray();
-        $virtuemartOrderId = Helper::getOrderIdByGingerOrder($input['order_id'], $this->_tablename);
-        $this->updateOrder($gingerOrder['status'], $virtuemartOrderId);
-
+        $client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
+        $gingerOrder = $client->getOrder($input['order_id'])->toArray();
+        $virtuemart_order_id = Helper::getOrderIdByGingerOrder($input['order_id'], $this->_tablename);
+        $this->updateOrder($gingerOrder['status'], $virtuemart_order_id);
         exit();
     }
 
     /**
-     *
-     * @param type $virtuemart_paymentmethod_id
-     * @param type $paymentCurrencyId
-     * @return boolean
+     * @return string
      * @since v1.0.0
      */
-    public function plgVmgetPaymentCurrency($virtuemart_paymentmethod_id, &$paymentCurrencyId)
+    public function customInfoHTML($country = null)
     {
-        if (!($method = $this->getVmPluginMethod($virtuemart_paymentmethod_id))) {
-            return null; // Another method was selected, do nothing
-        }
-        if (!$this->selectedThisElement($method->payment_element)) {
-            return false;
-        }
-        Helper::getPaymentCurrency($method);
+        if($this->payment_method == 'afterpay') {
+            $selectGender = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX_UPPER . 'AFTERPAY_MESSAGE_SELECT_GENDER';
+            $selectMale = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX_UPPER . 'AFTERPAY_MESSAGE_SELECT_GENDER_MALE';
+            $selectFemale = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX_UPPER . 'AFTERPAY_MESSAGE_SELECT_GENDER_FEMALE';
+            $dob = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX_UPPER . 'AFTERPAY_MESSAGE_ENTER_DOB';
+            $sessionDob = Bankconfig::BANK_PREFIX . 'afterpay_dob';
+            $dateFormat = 'PLG_VMPAYMENT_'. Bankconfig::BANK_PREFIX_UPPER .'AFTERPAY_MESSAGE_DATE_FORMAT';
+            $terms = 'PLG_VMPAYMENT_'. Bankconfig::BANK_PREFIX_UPPER .'AFTERPAY_TERMS_AND_CONDITIONS';
 
-        $paymentCurrencyId = $method->payment_currency;
-        return;
+            $html = JText::_($selectGender) . ' <br/>';
+            $html .= '<select name="gender" id="' . $this->name . '" class="' . $this->name . '">';
+            $html .= '<option value="male" '
+                . (JFactory::getSession()->get(Bankconfig::BANK_PREFIX.'afterpay_gender') == 'male' ? " selected" : "") . '>'
+                . JText::_($selectMale) . '</option>';
+            $html .= '<option value="female" '
+                . (JFactory::getSession()->get(Bankconfig::BANK_PREFIX.'afterpay_gender') == 'male' ? " selected" : "") . '>'
+                . JText::_($selectFemale) . '</option>';
+            $html .= "</select><br/>";
+            $html .= JText::_($dob) . '<br>';
+            $html .= '<input type="text" name="'. Bankconfig::BANK_PREFIX .'afterpay_dob" value="' . JFactory::getSession()->get($sessionDob, null, 'vm') . '"/>';
+            $html .= '<i>('.JText::_($dateFormat).')</i></br>';
+            $html .= '<input type="checkbox" name="terms_and_confditions" '.(JFactory::getSession()->get(Bankconfig::BANK_PREFIX .'afterpay_terms_and_confditions', null, 'vm') == 'on' ? 'checked="checked"' : null).' />';
+            $html .= '<a href="'. Helper::gettermsAndConditionsUrlByCountry($country). '" target="blank">'.JText::_($terms).'</a>';
+            return $html;
+        }
+
+        if ($this->payment_method == 'ideal') {
+            $client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
+            $issuers = $client->getIdealIssuers()->toArray();
+            $html = '<select name="issuer" id="issuer" class="' . $this->_name . '">';
+            foreach ($issuers as $issuer) {
+                $html .= '<option value="' . $issuer['id'] . '">' . $issuer['name'] . "</option>";
+            }
+            $html .= "</select>";
+            return $html;
+        }
     }
 
     /**
@@ -498,46 +494,31 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
      * @return boolean
      * @since v1.0.0
      */
-    public function plgVmDisplayListFEPayment(\VirtueMartCart $cart, $selected = 0, &$htmlIn) // main
+    public function plgVmDisplayListFEPayment(\VirtueMartCart $cart, $selected = 0, &$htmlIn)
     {
-        $currency_model = VmModel::getModel('currency');
-        $displayCurrency = $currency_model->getCurrency( $this->product->product_currency );
-        $currency = $displayCurrency->currency_code_3;
-
-        if($this->payment_method == 'apple-pay' && !Helper::applePayDetection()) return false;
-
         $client = (new ClientBuilderRedefiner($this->methodParametersFactory()))->createClient();
 
+        if($this->payment_method == 'apple-pay' && !Helper::applePayDetection()) {
+            return false;
+        }
         if(isset($this->methods)) {
+            $currency_model = VmModel::getModel('currency');
+            $displayCurrency = $currency_model->getCurrency();
+            $currency = $displayCurrency->currency_code_3;
             $result = $client->checkAvailabilityForPaymentMethodUsingCurrency($this->payment_method, new Currency($currency));
             if(!$result) return false;
         }
 
         if ($this->payment_method == 'afterpay' && isset($cart->BT['virtuemart_country_id'])) {
-
             $country = shopFunctions::getCountryByID($cart->BT['virtuemart_country_id'], 'country_2_code');
-
-            if (!$this->userIsFromAllowedCountries($country)) {
-                return false;
-            }
-            if ($this->isSetShowForIpFilter() && !$this->addressIsAllowed()) {
+            if (($this->isSetShowForIpFilter() && !$this->addressIsAllowed()) || !$this->userIsFromAllowedCountries($country)) {
                 return false;
             }
         }
-
-        if ($this->payment_method == 'ideal' || $this->payment_method == 'afterpay' || $this->payment_method == 'klarna-pay-later') {
-            if ($this->getPluginMethods($cart->vendorId) === 0) {
-                if (empty($this->_name)) {
-                    $app = JFactory::getApplication();
-                    $app->enqueueMessage(vmText::_('COM_VIRTUEMART_CART_NO_' . strtoupper($this->_psType)));
-                    return false;
-                } else {
-                    return false;
-                }
-            }
+        if (in_array($this->payment_method, ['ideal', 'afterpay', 'klarna-pay-later'])) {
             $method_name = $this->_psType . '_name';
             vmLanguage::loadJLang('com_virtuemart', true);
-            $htmla = array();
+            $htmla = [];
             $html = '';
             foreach ($this->methods as $currentMethod) {
                 if ($this->checkConditions($cart, $currentMethod, $cart->cartPrices)) {
@@ -545,15 +526,14 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
                     $methodSalesPrice = $this->setCartPrices($cart, $cartPrices, $currentMethod);
                     $currentMethod->$method_name = $this->renderPluginName($currentMethod);
                     $html = $this->getPluginHtml($currentMethod, $selected, $methodSalesPrice);
-
                     if ($this->payment_method == 'klarna-pay-later') {
                         $htmlIn[] = [$html];
                         return $this->isPaymentSelected($selected);
-                    } else {
-                        $htmla[] = $html . '<br />' . $this->customInfoHTML();
-                        $htmlIn[] = $htmla;
-                        return $this->isPaymentSelected($selected);
                     }
+                    $htmla[] = $html . '<br />' . $this->customInfoHTML();
+                    $htmlIn[] = $htmla;
+                    return $this->isPaymentSelected($selected);
+
                 }
             }
         }
@@ -576,88 +556,20 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
         return false;
     }
 
-    /**
-     *
-     * @param \VirtueMartCart $cart
-     * @param array $cart_prices
-     * @param type $cart_prices_name
-     * @return boolean
-     * @since v1.0.0
-     */
-    public function plgVmonSelectedCalculatePricePayment(\VirtueMartCart $cart, array &$cart_prices, &$cart_prices_name) // question
-    {
-        if ($this->payment_method == 'ideal' || $this->payment_method == 'klarna-pay-later' || $this->payment_method == 'afterpay') {
-            if (!($this->_currentMethod = $this->getVmPluginMethod($cart->virtuemart_paymentmethod_id))) {
-                return null; // Another method was selected, do nothing
-            }
-            if (!$this->selectedThisElement($this->_currentMethod->payment_element)) {
-                return false;
-            }
+    public function plgVmOnSelectedCalculatePricePayment (VirtueMartCart $cart, array &$cart_prices, &$cart_prices_name) {
 
-            if (!$this->checkConditions($cart, $this->_currentMethod, $cart_prices)) {
-                return false;
-            }
-            $this->renderPluginName($this->_currentMethod);
-
-            $this->setCartPrices($cart, $cart_prices, $this->_currentMethod);
-
-            return true;
-        }
-
-        return $this->onSelectedCalculatePrice($cart, $cart_prices, $cart_prices_name);
+        return $this->onSelectedCalculatePrice ($cart, $cart_prices, $cart_prices_name);
     }
 
     /**
-     * This is for checking the input data of the payment method within the checkout
+     * Check should page after no response from the bank should be redirected
      *
-     * @author Valerie Cartan Isaksen
+     * @return bool
+     * @since v1.0.0
      */
-    public function plgVmOnCheckoutCheckDataPayment(\VirtueMartCart $cart)
+    protected function isProcessingOrderNotConfirmedRedirect()
     {
-        if ($this->payment_method == 'afterpay') {
-            if ($cart->cartData['paymentName'] == '<span class="vmpayment_name">AfterPay</span>') {
-                if (!$this->userIsFromAllowedCountries($cart->BTaddress['fields']['virtuemart_country_id']['country_2_code'])) {
-                    return false;
-                }
-            } else {
-                return null;
-            }
-            if (!$this->selectedThisByMethodId($cart->virtuemart_paymentmethod_id)) {
-                return null; // Another method was selected, do nothing
-            }
-            if (!($this->_currentMethod = $this->getVmPluginMethod($cart->virtuemart_paymentmethod_id))) {
-                return false;
-            }
-
-            $app = JFactory::getApplication();
-            $dob = $app->getSession()->get(Bankconfig::BANK_PREFIX . 'afterpay_dob', null, 'vm');
-
-            if (Helper::isValidDate($dob) === false || $dob === null) {
-                $app->enqueueMessage(JText::_('PLG_VMPAYMENT_'. Bankconfig::BANK_PREFIX .'AFTERPAY_MESSAGE_INVALID_DATE_ERROR'), 'error');
-                $app->getSession()->clear(Bankconfig::BANK_PREFIX . 'afterpay_dob', 'vm');
-                $app->redirect(JRoute::_('index.php?option=com_virtuemart&view=cart&task=editpayment', false));
-                return false;
-            }
-            $tc = $app->getSession()->get(Bankconfig::BANK_PREFIX . 'afterpay_terms_and_confditions', null, 'vm');
-            if ($tc != 'on' || $tc == null) {
-                $app->enqueueMessage(JText::_('PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX .'AFTERPAY_MESSAGE_PLEASE_ACCEPT_TC'), 'error');
-                $app->getSession()->clear(Bankconfig::BANK_PREFIX . 'afterpay_terms_and_confditions', 'vm');
-                $app->redirect(JRoute::_('index.php?option=com_virtuemart&view=cart&task=editpayment', false));
-                return false;
-            }
-            return true;
-        }
-
-        if ($this->payment_method == 'klarna-pay-later') {
-            if (!$this->selectedThisByMethodId($cart->virtuemart_paymentmethod_id)) {
-                return null; // Another method was selected, do nothing
-            }
-            if (!($this->_currentMethod = $this->getVmPluginMethod($cart->virtuemart_paymentmethod_id))) {
-                return false;
-            }
-            return true;
-        }
-        return true;
+        return (bool)(vRequest::get('no_confirmation_redirect') !== null && vRequest::get('no_confirmation_redirect') == '1');
     }
 
     /**
@@ -670,82 +582,16 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
      */
     public function plgVmOnSelectCheckPayment(VirtueMartCart $cart, &$msg)
     {
-        if ($this->payment_method == 'klarna-pay-later') {
-            if (!$this->selectedThisByMethodId($cart->virtuemart_paymentmethod_id)) {
-                return null; // Another method was selected, do nothing
-            }
-
-            if (!($this->getVmPluginMethod($cart->virtuemart_paymentmethod_id))) {
-                return false;
-            }
-            return true;
-        }
-
         if ($this->payment_method == 'afterpay') {
-            if (!$this->selectedThisByMethodId($cart->virtuemart_paymentmethod_id)) {
-                return null; // Another method was selected, do nothing
-            }
-
-            if (!($this->getVmPluginMethod($cart->virtuemart_paymentmethod_id))) {
-                return false;
-            }
             JFactory::getSession()->set(Bankconfig::BANK_PREFIX . 'afterpay_gender', vRequest::getVar('gender'), 'vm');
             JFactory::getSession()->set(Bankconfig::BANK_PREFIX . 'afterpay_dob', vRequest::getVar(Bankconfig::BANK_PREFIX . 'afterpay_dob'), 'vm');
             JFactory::getSession()->set(Bankconfig::BANK_PREFIX . 'afterpay_terms_and_confditions', vRequest::getVar('terms_and_confditions'), 'vm');
-
             return true;
         }
-
         JFactory::getSession()->set(Bankconfig::BANK_PREFIX . 'ideal_issuer', vRequest::getVar('issuer'), 'vm');
         return $this->OnSelectCheck($cart);
     }
-
     /**
-     * @return string
-     * @since v1.0.0
-     */
-    public function customInfoHTML($country = null)
-    {
-        $select_message = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX . 'AFTERPAY_MESSAGE_SELECT_GENDER';
-        $male = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX . 'AFTERPAY_MESSAGE_SELECT_GENDER_MALE';
-        $female = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX . 'AFTERPAY_MESSAGE_SELECT_GENDER_FEMALE';
-        $dob = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX . 'AFTERPAY_MESSAGE_ENTER_DOB';
-        $data_format = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX . 'AFTERPAY_MESSAGE_DATE_FORMAT';
-        $terms = 'PLG_VMPAYMENT_' . Bankconfig::BANK_PREFIX . 'AFTERPAY_TERMS_AND_CONDITIONS';
-        $input = '<input type="text" name="' . Bankconfig::BANK_PREFIX .'afterpay_dob" value="';
-
-        if ($this->payment_method == 'afterpay') {
-            $html = JText::_($select_message) . ' <br/>';
-            $html .= '<select name="gender" id="' . $this->name . '" class="' . $this->name . '">';
-            $html .= '<option value="male" '
-                . (JFactory::getSession()->get(Bankconfig::BANK_PREFIX . 'afterpay_gender') == 'male' ? " selected" : "") . '>'
-                . JText::_($male) . '</option>';
-            $html .= '<option value="female" '
-                . (JFactory::getSession()->get(Bankconfig::BANK_PREFIX . 'afterpay_gender') == 'male' ? " selected" : "") . '>'
-                . JText::_($female) . '</option>';
-            $html .= "</select><br/>";
-            $html .= JText::_($dob) . '<br>';
-            $html .= $input . JFactory::getSession()->get(Bankconfig::BANK_PREFIX . 'afterpay_dob', null, 'vm') . '"/>';
-            $html .= '<i>(' . JText::_($data_format) . ')</i></br>';
-            $html .= '<input type="checkbox" name="terms_and_confditions" ' . (JFactory::getSession()->get(Bankconfig::BANK_PREFIX . 'afterpay_terms_and_confditions', null, 'vm') == 'on' ? 'checked="checked"' : null) . ' />';
-            $html .= '<a href="' . Helper::gettermsAndConditionsUrlByCountry($country) . '" target="blank">' . JText::_($terms) . '</a>';
-            return $html;
-        }
-        if ($this->payment_method == 'ideal') {
-            $issuers = $this->client->getIdealIssuers()->toArray();
-            $html = '<select name="issuer" id="issuer" class="' . $this->_name . '">';
-            foreach ($issuers as $issuer) {
-                $html .= '<option value="' . $issuer['id'] . '">' . $issuer['name'] . "</option>";
-            }
-            $html .= "</select>";
-            return $html;
-        }
-    }
-
-    /**
-     * check if filltering is set on,
-     * if so, only display if user is from that IP
-     *
      * @return boolean
      * @since v1.1.0
      */
@@ -775,10 +621,10 @@ class GingerVmPaymentPlugin extends \vmPSPlugin
      */
     protected function userIsFromAllowedCountries($country)
     {
-        if (empty($this->methodParametersFactory()->afterpayAllowedCountries())) {
+        if(empty($this->methodParametersFactory()->afterpayAllowedCountries())) {
             return true;
-        } else {
-            return in_array(strtoupper($country), $this->methodParametersFactory()->afterpayAllowedCountries());
         }
+
+        return in_array(strtoupper($country), $this->methodParametersFactory()->afterpayAllowedCountries());
     }
 }

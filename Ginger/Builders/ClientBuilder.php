@@ -15,12 +15,15 @@ class ClientBuilder
 
     public function createClient()
     {
-        return new Client(
-            new ClientOptions(
-                endpoint: Bankconfig::BANK_ENDPOINT,
-                useBundle: $this->params->bundleCaCert(),
-                apiKey: $this->params->apiKey()
-            )
-        );
+        if(!empty($this->params->apiKey()))
+        {
+            return new Client(
+                new ClientOptions(
+                    endpoint: Bankconfig::BANK_ENDPOINT,
+                    useBundle: $this->params->bundleCaCert(),
+                    apiKey: $this->params->apiKey()
+                )
+            );
+        }
     }
 }

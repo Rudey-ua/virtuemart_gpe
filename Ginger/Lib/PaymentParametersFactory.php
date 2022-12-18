@@ -34,12 +34,13 @@ class PaymentParametersFactory {
                 $param = explode('=', $payment_param);
                 $payment_params[$param[0]] = substr($param[1], 1, -1);
 
-                if(isset(PaymentParameters::$mapping[$param[0]])) // check if isset params
-
-                if ($refObject->hasProperty(PaymentParameters::$mapping[$param[0]])) {
-                    $refProperty = $refObject->getProperty(PaymentParameters::$mapping[$param[0]]);
-                    $refProperty->setAccessible(true);
-                    $refProperty->setValue($paymentParams, trim(substr($param[1], 1, -1)));
+                if(isset(PaymentParameters::$mapping[$param[0]]))
+                {
+                    if ($refObject->hasProperty(PaymentParameters::$mapping[$param[0]])) {
+                        $refProperty = $refObject->getProperty(PaymentParameters::$mapping[$param[0]]);
+                        $refProperty->setAccessible(true);
+                        $refProperty->setValue($paymentParams, trim(substr($param[1], 1, -1)));
+                    }
                 }
             }
 

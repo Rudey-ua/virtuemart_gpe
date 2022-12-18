@@ -2,11 +2,6 @@
 
 namespace Ginger\Lib;
 
-/**
- * Paymentparameters
- *
- * @author GingerPayments
- */
 class PaymentParameters
 {
     public static $mapping = [
@@ -30,7 +25,6 @@ class PaymentParameters
     ];
     private $apiKey;
     private $bundleCaCert;
-    private $allowNotification;
     private $statusNew;
     private $statusPending;
     private $statusProcessing;
@@ -39,10 +33,6 @@ class PaymentParameters
     private $statusCanceled;
     private $statusExpired;
     private $statusAccepted;
-    private $statusCaptured;
-    private $allowedIpAddresses;
-    private $testApiKey;
-    private $afterpayTestApiKey;
     private $afterpayAllowedIpAddresses;
     private $afterpayAllowedCountries;
 
@@ -54,11 +44,6 @@ class PaymentParameters
     public function bundleCaCert()
     {
         return boolval($this->bundleCaCert);
-    }
-
-    public function allowNotification()
-    {
-        return $this->allowNotification;
     }
 
     public function statusNew()
@@ -101,43 +86,6 @@ class PaymentParameters
         return $this->statusAccepted;
     }
 
-    public function statusCaptured()
-    {
-        return $this->statusCaptured;
-    }
-
-    public function getAfterpayTestApiKey() {
-        return $this->afterpayTestApiKey;
-    }
-
-    public function isApiKeyValid()
-    {
-        return $this->apiKey !== null && strlen($this->apiKey) > 0;
-    }
-
-    /**
-     * id addresses for klarna
-     *
-     * @return null|array
-     */
-    public function allowedIpAddresses()
-    {
-        if (empty($this->allowedIpAddresses)) {
-            return null;
-        }
-        $addresses = explode(',', $this->allowedIpAddresses);
-        array_walk($addresses,
-                function(&$val) {
-                    return trim($val);
-                });
-        return $addresses;
-    }
-
-    /**
-     * id addresses for afterpay
-     *
-     * @return null|array
-     */
     public function afterpayAllowedIpAddresses()
     {
         if (empty($this->afterpayAllowedIpAddresses)) {
@@ -151,11 +99,6 @@ class PaymentParameters
         return $addresses;
     }
 
-    /**
-     * countries available for afterpay
-     *
-     * @return null|array
-     */
     public function afterpayAllowedCountries()
     {
         if (empty($this->afterpayAllowedCountries)) {
@@ -165,26 +108,4 @@ class PaymentParameters
             return $expCountries;
         }
     }
-
-    public function testApiKey()
-    {
-        return $this->testApiKey;
-    }
-
-    public function getKlarnaPayLaterApiKey()
-    {
-        if (!empty($this->testApiKey)) {
-            return $this->testApiKey;
-        }
-        return $this->apiKey;
-    }
-
-     public function getAfterpayApiKey()
-    {
-        if (!empty($this->afterpayTestApiKey)) {
-            return $this->afterpayTestApiKey;
-        }
-        return $this->apiKey;
-    }
-
 }

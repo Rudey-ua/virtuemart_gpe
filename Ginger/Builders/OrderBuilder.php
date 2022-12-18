@@ -14,6 +14,7 @@ use GingerPluginSdk\Entities\Extra;
 use GingerPluginSdk\Entities\Line;
 use GingerPluginSdk\Entities\PaymentMethodDetails;
 use GingerPluginSdk\Properties\Amount;
+use GingerPluginSdk\Properties\Birthdate;
 use GingerPluginSdk\Properties\Country;
 use GingerPluginSdk\Properties\Currency;
 use GingerPluginSdk\Properties\EmailAddress;
@@ -81,7 +82,7 @@ class OrderBuilder
         return new PaymentMethodDetails(
             [
                 'issuer_id' => $this->getIssuer(),
-                'verified_terms_of_service' => $verifiedTerms,
+                'verified_terms_of_service' => $this->getTermsAndConditions(),
                 'cutomer' => 'cutomer'
             ]);
     }
@@ -101,7 +102,7 @@ class OrderBuilder
         return new Address(
             addressType: $addressType,
             postalCode: $billing_info->zip,
-            country: new Country('NL')
+            country: new Country(shopFunctions::getCountryByID($this->order['details']['BT']->virtuemart_country_id, 'country_2_code'))
         );
     }
 
@@ -113,6 +114,21 @@ class OrderBuilder
         );
     }
 
+    private function getBirthdate()
+    {
+        return new Birthdate(\JFactory::getSession()->get(Bankconfig::BANK_PREFIX.'afterpay_dob', null, 'vm'));
+    }
+
+    private function getGender()
+    {
+        return \JFactory::getSession()->get(Bankconfig::BANK_PREFIX.'afterpay_gender', null, 'vm');
+    }
+
+    private function getTermsAndConditions()
+    {
+        return JFactory::getSession()->get(Bankconfig::BANK_PREFIX .'afterpay_terms_and_confditions', null, 'vm') == 'on';
+    }
+
     public function getCustomer(): Customer
     {
         return new Customer(
@@ -120,7 +136,9 @@ class OrderBuilder
             firstName: $this->order['details']['BT']->first_name,
             lastName: $this->order['details']['BT']->last_name,
             emailAddress: new EmailAddress($this->order['details']['BT']->email),
+            gender: $this->getGender(),
             phoneNumbers: new PhoneNumbers($this->order['details']['BT']->phone_1),
+            birthdate: $this->getBirthdate() ? new Birthdate($this->getBirthdate()) : null,
             ipAddress: filter_var(\JFactory::getApplication()->input->server->get('REMOTE_ADDR'), FILTER_VALIDATE_IP),
             locale: new Locale(Helper::getLocale()),
             merchantCustomerId: $this->order['details']['BT']->virtuemart_user_id
